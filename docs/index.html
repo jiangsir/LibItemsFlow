@@ -325,8 +325,14 @@
       }
 
       function matchItemByCode(items, code) {
-        const c = String(code || "").trim();
-        return items.find((x) => x.AssetTag === c || x.ItemID === c) || null;
+        const c = String(code || "").trim().toLowerCase();
+        return (
+          items.find((x) => {
+            const assetTag = String(x.AssetTag ?? "").trim().toLowerCase();
+            const itemID = String(x.ItemID ?? "").trim().toLowerCase();
+            return assetTag === c || itemID === c;
+          }) || null
+        );
       }
 
       function renderCurrentItem(item) {
