@@ -10,6 +10,31 @@
   - 後端：Google Apps Script（GAS）Web App
   - 資料庫：Google Spreadsheet（多工作表）
 
+### 0.1 API 路由設計規範（重要限制）
+**⚠️ 強制使用查詢參數，禁止使用路徑參數**
+
+由於 Google Workspace 教育版對 Apps Script Web App 的限制，路徑參數（如 `/exec/health`）可能被組織政策封鎖。
+
+**正確做法：**
+```
+✅ 使用查詢參數：/exec?action=health
+✅ 使用簡寫參數：/exec?a=health
+❌ 禁止路徑參數：/exec/health
+```
+
+**路由實作規則：**
+1. 所有 API 端點必須使用 `action` 或 `a` 查詢參數來指定操作
+2. 同時支援路徑參數（如果可用）和查詢參數（保證相容性）
+3. 查詢參數優先於路徑參數
+4. HTTP 方法（GET/POST）仍用於區分讀寫操作
+
+**範例：**
+- Health check: `GET /exec?action=health`
+- 取得設備清單: `GET /exec?action=items`
+- 新增設備: `POST /exec?action=items`
+- 借出設備: `POST /exec?action=loans`
+- 歸還設備: `POST /exec?action=returns`
+
 ## 1. 目標
 - 管理設備借出/歸還行為的完整紀錄
 - 追蹤未歸還設備並支援追回
@@ -125,6 +150,25 @@
 - LOAN_RETURN
 - STATUS_CHANGE
 
+### 5.4 工作表：Users（使用者身份表）
+| 欄位 | 型態 | 說明 |
+|---|---|---|
+| UserID | string | 唯一識別碼 |
+| Email | string | Gmail 帳號（登入用） |
+| Name | string | 使用者姓名 |
+| Role | string | 角色列舉（見下） |
+| Status | string | 狀態列舉（見下） |
+| CreatedAt | datetime | 建檔時間 |
+| UpdatedAt | datetime | 最後更新時間 |
+
+#### Users 角色列舉
+- ADMIN（管理員，可執行所有操作）
+- STAFF（職員，可執行借還操作）
+
+#### Users 狀態列舉
+- ACTIVE（啟用）
+- DISABLED（停用）
+
 ## 6. 驗證規則
 - Items.Name: required, 1-100 chars
 - Items.Category: required, 1-50 chars
@@ -135,8 +179,16 @@
 - Loans.LoanDate: required, ISO date
 - Loans.DueDate: required, ISO date, must be >= LoanDate
 - Loans.ReturnDate: optional, ISO date, must be >= LoanDate
+- Users.Email: required, valid Gmail format, unique
+- Users.Name: required, 1-50 chars
+- Users.Role: must be Users Role Enum
+- Users.Status: must be Users Status Enum
 
 ## 7. 商業規則（狀態轉移）
+- 身份驗證規則：
+  - 所有 API 操作（除 /auth 外）需驗證使用者身份。
+  - 使用者必須存在於 Users 表且 Status 為 ACTIVE。
+  - Logs.Actor 記錄為執行操作的 Users.Email。
 - 當建立借出時：
   - Items.Status must be AVAILABLE.
   - Items.Status becomes CHECKED_OUT.
@@ -153,17 +205,43 @@
 ### 8.0 API 基本規範
 - Base URL：GAS Web App 端點
 - Content-Type：application/json
+- 身份驗證：使用 Google OAuth 2.0（Gmail 登入）
+  - 前端取得 Google ID Token 後，於請求 Header 加入：`Authorization: Bearer <ID_TOKEN>`
+  - GAS 端使用 OAuth2.tokeninfo API 驗證 Token 並取得 Email
+  - 檢查 Email 是否存在於 Users 表且 Status 為 ACTIVE
 - 回應格式：
   - { "ok": boolean, "data": any, "error": { "code": string, "message": string } }
 
-### 8.1 Items
+### 8.1 Auth（身份驗證）
+- POST /auth/verify
+  - Header: Authorization: Bearer <ID_TOKEN>
+  - Response: { "email": string, "name": string, "role": string }
+  - 驗證 Token 並檢查 Users 表，回傳使用者資訊
+  - 錯誤碼：UNAUTHORIZED, USER_NOT_FOUND, USER_DISABLED
+
+### 8.2 Users（使用者管理，限 ADMIN）
+- GET /users
+  - Response: Users 清單
+  - 需 ADMIN 權限
+- POST /users
+  - Body: { Email, Name, Role }
+  - Response: 建立後的 User
+  - 需 ADMIN 權限
+- PUT /users/:id
+  - Body: { Name?, Role?, Status? }
+  - Response: 更新後的 User
+  - 需 ADMIN 權限
+
+### 8.3 Items
 - GET /items
   - Query: `query` (string, optional)
   - Response: Items 清單
+  - 需身份驗證
 - POST /items
   - Body: { Name, Category, AssetTag?, Location?, Note? }
   - Response: 建立後的 Item
   - Side effects: Logs ITEM_CREATE
+  - 需身份驗證
 
 POST /items 範例：
 ```json
@@ -176,44 +254,65 @@ POST /items 範例：
 }
 ```
 
-### 8.2 Loans
+### 8.4 Loans
 - POST /loans
   - Body: { ItemID, BorrowerName, BorrowerUnit?, BorrowerContact, LoanDate, DueDate, Note? }
   - Response: 建立後的 Loan
   - Side effects: Items.Status -> CHECKED_OUT, Logs LOAN_CREATE
+  - 需身份驗證
 - POST /returns
   - Body: { LoanID, ReturnDate, Note? }
   - Response: 更新後的 Loan
   - Side effects: Items.Status -> AVAILABLE, Logs LOAN_RETURN
+  - 需身份驗證
 - GET /loans
   - Query: `status` (ACTIVE|OVERDUE|RETURNED), optional
   - Response: Loans 清單
+  - 需身份驗證
 
-### 8.3 錯誤碼
+### 8.5 錯誤碼
+- UNAUTHORIZED（未授權或 Token 無效）
+- USER_NOT_FOUND（Email 不在 Users 表中）
+- USER_DISABLED（使用者已停用）
+- FORBIDDEN（無權限執行操作）
 - ITEM_NOT_FOUND
 - ITEM_NOT_AVAILABLE
 - LOAN_NOT_FOUND
 - VALIDATION_FAILED
 - INTERNAL_ERROR
 
-## 8.4 試算表自訂選單（GAS）
+## 8.6 試算表自訂選單（GAS）
 - 需在 Spreadsheet UI 建立自訂選單：`初始化資料表`
-- 選單內功能：建立必要工作表（Items/Loans/Logs）
+- 選單內功能：建立必要工作表（Items/Loans/Logs/Users）
 - 若工作表已存在，保留原有工作表與資料，不重建、不覆蓋
 - 建議操作時機：管理員首次部署後手動執行
+- 首次初始化時，可自動新增一筆預設管理員帳號（Email 需手動設定為執行者的 Gmail）
 
 ## 9. UI 需求（GitHub Pages）
+- 登入頁
+  - 使用 Google Sign-In 按鈕（Gmail 登入）
+  - 取得 ID Token 並呼叫 /auth/verify 驗證身份
+  - 驗證成功後導向 Dashboard
+  - 顯示使用者名稱與角色
 - Dashboard
   - 未歸還數量、逾期數量
+  - 顯示登入使用者資訊與登出按鈕
 - 借出頁
   - 設備搜尋 + 借用人資訊 + 借出確認
   - 找不到設備時提供「立即新增」
+  - 需身份驗證
 - 歸還頁
   - 查詢未歸還 → 確認歸還
+  - 需身份驗證
 - 設備管理頁
   - 列表 + 編輯/新增
+  - 需身份驗證
 - 逾期清單頁
   - 列出借用人與聯絡方式
+  - 需身份驗證
+- 使用者管理頁（僅 ADMIN 可見）
+  - 列表 + 新增/編輯使用者
+  - 管理使用者權限與狀態
 
 ## 10. 規則與限制
 - 同一設備不可同時有多筆未歸還記錄
@@ -226,6 +325,6 @@ POST /items 範例：
 - GAS 回傳錯誤 → 顯示訊息並停止寫入
 
 ## 12. 可選擴充
-- 簡易登入（管理員/一般使用者）
 - Email 或 LINE 通知逾期
 - CSV 匯出
+- 使用者操作紀錄詳細查詢
