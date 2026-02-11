@@ -221,51 +221,131 @@ function handleGetItems_(query) {
  * POST /exec?action=loans
  */
 function handleCreateLoan_(body) {
-  // 驗證輸入
+  // Supports both payload styles:
+  // - single: { ItemID, BorrowerName, ... }
+  // - batch: { ItemIDs: [...], BorrowerName, ... }
+  if (Array.isArray(body.ItemIDs)) {
+    return handleCreateLoanBatch_(body);
+  }
+  return handleCreateLoanSingle_(body);
+}
+
+function handleCreateLoanSingle_(body) {
   const validation = validateLoanCreate_(body);
   if (!validation.valid) {
     return error_("VALIDATION_ERROR", validation.errors.join('; '));
   }
-  
-  // 檢查設備是否存在且可借
-  const item = findById_('Items', 'ItemID', body.ItemID);
-  const availCheck = validateItemAvailable_(item);
-  if (!availCheck.valid) {
-    return error_("ITEM_UNAVAILABLE", availCheck.errors.join('; '));
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const item = findById_('Items', 'ItemID', body.ItemID);
+    const availCheck = validateItemAvailable_(item);
+    if (!availCheck.valid) {
+      return error_("ITEM_UNAVAILABLE", availCheck.errors.join('; '));
+    }
+
+    const loan = createLoanAndUpdateItem_({
+      itemID: body.ItemID,
+      itemName: item.Name,
+      borrowerName: body.BorrowerName,
+      borrowerUnit: body.BorrowerUnit || '',
+      borrowerContact: body.BorrowerContact,
+      loanDate: body.LoanDate,
+      dueDate: body.DueDate,
+      note: body.Note || ''
+    });
+
+    return ok_(loan);
+  } finally {
+    lock.releaseLock();
   }
-  
-  // 建立借還記錄
+}
+
+function handleCreateLoanBatch_(body) {
+  const validation = validateLoanBatchCreate_(body);
+  if (!validation.valid) {
+    return error_("VALIDATION_ERROR", validation.errors.join('; '));
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const itemIDs = body.ItemIDs.map(id => String(id).trim());
+    const items = itemIDs.map(itemID => ({
+      itemID: itemID,
+      item: findById_('Items', 'ItemID', itemID)
+    }));
+
+    const unavailable = [];
+    items.forEach(entry => {
+      const availCheck = validateItemAvailable_(entry.item);
+      if (!availCheck.valid) {
+        unavailable.push({
+          itemID: entry.itemID,
+          reason: availCheck.errors.join('; ')
+        });
+      }
+    });
+
+    if (unavailable.length > 0) {
+      return error_("ITEM_UNAVAILABLE", JSON.stringify(unavailable));
+    }
+
+    const createdLoans = items.map(entry => createLoanAndUpdateItem_({
+      itemID: entry.itemID,
+      itemName: entry.item.Name,
+      borrowerName: body.BorrowerName,
+      borrowerUnit: body.BorrowerUnit || '',
+      borrowerContact: body.BorrowerContact,
+      loanDate: body.LoanDate,
+      dueDate: body.DueDate,
+      note: body.Note || ''
+    }));
+
+    return ok_({
+      borrower: {
+        BorrowerName: body.BorrowerName,
+        BorrowerUnit: body.BorrowerUnit || '',
+        BorrowerContact: body.BorrowerContact
+      },
+      itemCount: createdLoans.length,
+      loans: createdLoans
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function createLoanAndUpdateItem_(params) {
   const now = getUtcTimestamp_();
   const loan = {
     LoanID: generateId_('LOAN'),
-    ItemID: body.ItemID,
-    BorrowerName: body.BorrowerName,
-    BorrowerUnit: body.BorrowerUnit || '',
-    BorrowerContact: body.BorrowerContact,
-    LoanDate: body.LoanDate,
-    DueDate: body.DueDate,
+    ItemID: params.itemID,
+    BorrowerName: params.borrowerName,
+    BorrowerUnit: params.borrowerUnit,
+    BorrowerContact: params.borrowerContact,
+    LoanDate: params.loanDate,
+    DueDate: params.dueDate,
     ReturnDate: '',
     Status: 'ACTIVE',
-    Note: body.Note || '',
+    Note: params.note || '',
     CreatedAt: now,
     UpdatedAt: now
   };
-  
+
   createRecord_('Loans', loan);
-  
-  // 更新設備狀態為借出中
-  updateRecord_('Items', 'ItemID', body.ItemID, {
+  updateRecord_('Items', 'ItemID', params.itemID, {
     Status: 'CHECKED_OUT',
     UpdatedAt: now
   });
-  
-  // 記錄日誌
-  createLog_('LOAN_CREATE', body.BorrowerName, loan.LoanID, {
-    itemID: body.ItemID,
-    itemName: item.Name
+
+  createLog_('LOAN_CREATE', params.borrowerName, loan.LoanID, {
+    itemID: params.itemID,
+    itemName: params.itemName
   });
-  
-  return ok_(loan);
+
+  return loan;
 }
 
 /**

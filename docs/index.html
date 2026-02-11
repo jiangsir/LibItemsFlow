@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LibItemsFlow 借用</title>
+    <title>LibItemsFlow 借用台</title>
     <style>
       :root {
         --bg: #f4f6f8;
@@ -27,7 +27,7 @@
       }
 
       .wrap {
-        max-width: 760px;
+        max-width: 860px;
         margin: 20px auto;
         padding: 0 14px 24px;
       }
@@ -60,7 +60,7 @@
         margin-bottom: 4px;
       }
 
-      input, select, button {
+      input, button {
         width: 100%;
         border: 1px solid #d1d5db;
         border-radius: 10px;
@@ -110,6 +110,38 @@
 
       .hidden { display: none; }
 
+      .list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: #fbfcfd;
+      }
+
+      .list-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .tiny {
+        width: auto;
+        padding: 6px 8px;
+        border-radius: 8px;
+        font-size: 12px;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
       pre {
         margin: 10px 0 0;
         font-size: 12px;
@@ -124,8 +156,8 @@
   <body>
     <div class="wrap">
       <section class="card">
-        <h1>借用作業</h1>
-        <p class="sub">掃描條碼後按 Enter。若查無 item，會切換到新增 item 表單。</p>
+        <h1>設備借用台</h1>
+        <p class="sub">先建立借用人資料，再加入多個設備，一次借出。</p>
       </section>
 
       <section class="card">
@@ -135,64 +167,72 @@
         </div>
         <div class="grid-2">
           <button id="saveApiBase">儲存 API URL</button>
-          <button class="alt" id="resetApiBase">還原預設</button>
+          <button class="alt" id="resetApiBase">重設預設值</button>
         </div>
       </section>
 
       <section class="card">
         <div class="field">
-          <label for="scanCode">條碼 / AssetTag / ItemID</label>
-          <input id="scanCode" class="scan-input" autocomplete="off" placeholder="請掃描..." />
+          <label for="scanCode">掃描碼 / AssetTag / ItemID</label>
+          <input id="scanCode" class="scan-input" autocomplete="off" placeholder="輸入或掃描設備碼" />
         </div>
         <div class="grid-2">
-          <button id="scanLookup">查詢 Item</button>
-          <button class="alt" id="scanClear">清除</button>
+          <button id="scanLookup">查詢並加入清單</button>
+          <button class="alt" id="scanClear">清空掃描欄位</button>
         </div>
         <div id="scanStatus" class="status"></div>
         <div id="itemInfo" class="item-info hidden"></div>
       </section>
 
       <section id="newItemCard" class="card hidden">
-        <h2 style="margin:0 0 10px; font-size:18px;">新增 Item（查無資料）</h2>
+        <h2 style="margin:0 0 10px; font-size:18px;">找不到設備，立即新增</h2>
         <div class="field">
           <label for="newAssetTag">AssetTag</label>
           <input id="newAssetTag" />
         </div>
         <div class="field">
           <label for="newName">名稱</label>
-          <input id="newName" placeholder="例如：投影機 A" />
+          <input id="newName" placeholder="例如：Chromebook A" />
         </div>
         <div class="field">
           <label for="newCategory">分類</label>
-          <input id="newCategory" placeholder="例如：Projector" />
+          <input id="newCategory" placeholder="例如：Notebook" />
         </div>
         <div class="field">
-          <label for="newLocation">位置（可空白）</label>
+          <label for="newLocation">位置（可選）</label>
           <input id="newLocation" />
         </div>
-        <button id="createItemBtn">建立 Item</button>
+        <button id="createItemBtn">建立設備並加入清單</button>
         <div id="newItemStatus" class="status"></div>
       </section>
 
       <section class="card">
         <h2 style="margin:0 0 10px; font-size:18px;">借用資料</h2>
         <div class="field">
-          <label for="borrowerName">借用人</label>
+          <label>設備清單</label>
+          <div id="borrowItemsEmpty" class="muted">尚未加入設備</div>
+          <div id="borrowItemsList" class="list"></div>
+        </div>
+        <div class="field">
+          <button class="alt" id="clearBorrowItems">清空設備清單</button>
+        </div>
+        <div class="field">
+          <label for="borrowerName">借用人姓名</label>
           <input id="borrowerName" />
         </div>
         <div class="field">
-          <label for="borrowerContact">聯絡方式</label>
+          <label for="borrowerContact">借用人聯絡方式</label>
           <input id="borrowerContact" />
         </div>
         <div class="field">
-          <label for="borrowerUnit">單位（可空白）</label>
+          <label for="borrowerUnit">單位 / 班級（可選）</label>
           <input id="borrowerUnit" />
         </div>
         <div class="field">
-          <label for="dueDate">應還日期</label>
+          <label for="dueDate">預計歸還日期</label>
           <input id="dueDate" type="date" />
         </div>
-        <button id="borrowSubmit">完成借用</button>
+        <button id="borrowSubmit">一次借出清單設備</button>
         <div id="borrowStatus" class="status"></div>
         <pre id="resultView"></pre>
       </section>
@@ -203,7 +243,10 @@
       let API_BASE = localStorage.getItem("LIBITEMSFLOW_API_BASE") || DEFAULT_API_BASE;
       API_BASE = String(API_BASE).trim().replace(/\/+$/, "");
 
-      const selected = { item: null };
+      const state = {
+        items: [],
+        currentItem: null,
+      };
 
       const el = {
         apiBase: document.getElementById("apiBase"),
@@ -221,6 +264,9 @@
         newLocation: document.getElementById("newLocation"),
         createItemBtn: document.getElementById("createItemBtn"),
         newItemStatus: document.getElementById("newItemStatus"),
+        borrowItemsList: document.getElementById("borrowItemsList"),
+        borrowItemsEmpty: document.getElementById("borrowItemsEmpty"),
+        clearBorrowItems: document.getElementById("clearBorrowItems"),
         borrowerName: document.getElementById("borrowerName"),
         borrowerContact: document.getElementById("borrowerContact"),
         borrowerUnit: document.getElementById("borrowerUnit"),
@@ -283,7 +329,7 @@
         return items.find((x) => x.AssetTag === c || x.ItemID === c) || null;
       }
 
-      function renderSelectedItem(item) {
+      function renderCurrentItem(item) {
         if (!item) {
           el.itemInfo.classList.add("hidden");
           el.itemInfo.innerHTML = "";
@@ -298,23 +344,58 @@
         ].join("");
       }
 
-      function resetForNextScan() {
-        selected.item = null;
-        renderSelectedItem(null);
+      function renderBorrowItems() {
+        el.borrowItemsList.innerHTML = "";
+        if (state.items.length === 0) {
+          el.borrowItemsEmpty.classList.remove("hidden");
+          return;
+        }
+        el.borrowItemsEmpty.classList.add("hidden");
+
+        state.items.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "list-item";
+          row.innerHTML = [
+            "<div>",
+            `<div><strong>${item.Name || "(未命名設備)"}</strong></div>`,
+            `<div class="list-meta">${item.ItemID || ""} / ${item.AssetTag || "-"}</div>`,
+            "</div>",
+            `<button class="alt tiny" data-remove-item="${item.ItemID}">移除</button>`,
+          ].join("");
+          el.borrowItemsList.appendChild(row);
+        });
+      }
+
+      function resetScanPanel() {
+        state.currentItem = null;
+        renderCurrentItem(null);
         el.newItemCard.classList.add("hidden");
         el.newName.value = "";
         el.newCategory.value = "";
         el.newLocation.value = "";
         clearStatus(el.newItemStatus);
-        clearStatus(el.borrowStatus);
+      }
+
+      function addItemToBorrowList(item) {
+        if (!item || !item.ItemID) return false;
+        const exists = state.items.some((x) => x.ItemID === item.ItemID);
+        if (exists) return false;
+        state.items.push(item);
+        renderBorrowItems();
+        return true;
+      }
+
+      function removeItemFromBorrowList(itemID) {
+        state.items = state.items.filter((x) => x.ItemID !== itemID);
+        renderBorrowItems();
       }
 
       async function lookupItem() {
         const code = el.scanCode.value.trim();
-        resetForNextScan();
+        resetScanPanel();
         clearStatus(el.scanStatus);
         if (!code) {
-          showStatus(el.scanStatus, "warn", "請先掃描或輸入條碼");
+          showStatus(el.scanStatus, "warn", "請先輸入或掃描設備碼");
           return;
         }
 
@@ -329,21 +410,23 @@
         const found = matchItemByCode(items, code);
 
         if (!found) {
-          showStatus(el.scanStatus, "warn", "查無 item，請先新增");
+          showStatus(el.scanStatus, "warn", "找不到設備，請先建立");
           el.newAssetTag.value = code;
           el.newItemCard.classList.remove("hidden");
           el.newName.focus();
           return;
         }
 
-        selected.item = found;
-        renderSelectedItem(found);
+        state.currentItem = found;
+        renderCurrentItem(found);
         if (found.Status !== "AVAILABLE") {
-          showStatus(el.scanStatus, "err", "此 item 目前不可借用，狀態: " + found.Status);
+          showStatus(el.scanStatus, "err", "設備不可借，目前狀態: " + found.Status);
           return;
         }
-        showStatus(el.scanStatus, "ok", "找到可借 item");
-        el.borrowerName.focus();
+
+        const added = addItemToBorrowList(found);
+        showStatus(el.scanStatus, added ? "ok" : "warn", added ? "已加入借用清單" : "此設備已在清單中");
+        el.scanCode.select();
       }
 
       async function createItem() {
@@ -355,32 +438,43 @@
           Location: el.newLocation.value.trim(),
           Note: "created from borrow UI",
         };
+
         const payload = await apiPost("items", body);
         showJson(payload);
         if (!payload.ok) {
-          showStatus(el.newItemStatus, "err", "新增失敗: " + (payload.error?.message || "unknown"));
+          showStatus(el.newItemStatus, "err", "建立失敗: " + (payload.error?.message || "unknown"));
           return;
         }
-        selected.item = payload.data;
-        renderSelectedItem(selected.item);
+
+        state.currentItem = payload.data;
+        renderCurrentItem(state.currentItem);
+        addItemToBorrowList(state.currentItem);
         el.newItemCard.classList.add("hidden");
-        showStatus(el.scanStatus, "ok", "新增 item 成功，請繼續借用");
-        showStatus(el.newItemStatus, "ok", "新增成功");
-        el.borrowerName.focus();
+        showStatus(el.scanStatus, "ok", "設備建立成功，已加入借用清單");
+        showStatus(el.newItemStatus, "ok", "建立成功");
+        el.scanCode.select();
       }
 
       async function submitBorrow() {
-        if (!selected.item || !selected.item.ItemID) {
-          showStatus(el.borrowStatus, "warn", "請先掃描並確認 item");
+        if (state.items.length === 0) {
+          showStatus(el.borrowStatus, "warn", "請先加入至少一個設備");
           return;
         }
-        if (selected.item.Status !== "AVAILABLE") {
-          showStatus(el.borrowStatus, "err", "item 非 AVAILABLE，不能借用");
+        if (!el.borrowerName.value.trim()) {
+          showStatus(el.borrowStatus, "warn", "請填借用人姓名");
+          return;
+        }
+        if (!el.borrowerContact.value.trim()) {
+          showStatus(el.borrowStatus, "warn", "請填借用人聯絡方式");
+          return;
+        }
+        if (!el.dueDate.value) {
+          showStatus(el.borrowStatus, "warn", "請填預計歸還日期");
           return;
         }
 
         const body = {
-          ItemID: selected.item.ItemID,
+          ItemIDs: state.items.map((x) => x.ItemID),
           BorrowerName: el.borrowerName.value.trim(),
           BorrowerUnit: el.borrowerUnit.value.trim(),
           BorrowerContact: el.borrowerContact.value.trim(),
@@ -388,18 +482,24 @@
           DueDate: el.dueDate.value,
           Note: "",
         };
+
         const payload = await apiPost("loans", body);
         showJson(payload);
         if (!payload.ok) {
           showStatus(el.borrowStatus, "err", "借用失敗: " + (payload.error?.message || "unknown"));
           return;
         }
-        showStatus(el.borrowStatus, "ok", "借用成功，LoanID: " + (payload.data?.LoanID || ""));
+
+        const count = payload.data?.itemCount || state.items.length;
+        showStatus(el.borrowStatus, "ok", `借用成功，共 ${count} 件`);
+
         el.scanCode.value = "";
         el.borrowerName.value = "";
         el.borrowerContact.value = "";
         el.borrowerUnit.value = "";
-        resetForNextScan();
+        state.items = [];
+        renderBorrowItems();
+        resetScanPanel();
         el.scanCode.focus();
       }
 
@@ -411,20 +511,20 @@
         }
         API_BASE = next;
         localStorage.setItem("LIBITEMSFLOW_API_BASE", API_BASE);
-        showStatus(el.scanStatus, "ok", "API URL 已更新");
+        showStatus(el.scanStatus, "ok", "API URL 已儲存");
       });
 
       el.resetApiBase.addEventListener("click", () => {
         API_BASE = DEFAULT_API_BASE;
         el.apiBase.value = API_BASE;
         localStorage.setItem("LIBITEMSFLOW_API_BASE", API_BASE);
-        showStatus(el.scanStatus, "ok", "已還原預設 API URL");
+        showStatus(el.scanStatus, "ok", "已重設為預設 API URL");
       });
 
       el.scanLookup.addEventListener("click", () => lookupItem().catch((e) => showStatus(el.scanStatus, "err", e.message)));
       el.scanClear.addEventListener("click", () => {
         el.scanCode.value = "";
-        resetForNextScan();
+        resetScanPanel();
         showJson({});
         el.scanCode.focus();
       });
@@ -437,6 +537,18 @@
 
       el.createItemBtn.addEventListener("click", () => createItem().catch((e) => showStatus(el.newItemStatus, "err", e.message)));
       el.borrowSubmit.addEventListener("click", () => submitBorrow().catch((e) => showStatus(el.borrowStatus, "err", e.message)));
+      el.clearBorrowItems.addEventListener("click", () => {
+        state.items = [];
+        renderBorrowItems();
+        showStatus(el.borrowStatus, "ok", "已清空設備清單");
+      });
+      el.borrowItemsList.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-remove-item]");
+        if (!btn) return;
+        removeItemFromBorrowList(btn.getAttribute("data-remove-item"));
+      });
+
+      renderBorrowItems();
     </script>
   </body>
 </html>

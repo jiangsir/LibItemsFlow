@@ -85,6 +85,60 @@ function validateLoanCreate_(data) {
 }
 
 /**
+ * 驗證批次借出資料（同一借用人、一次多個設備）
+ * @param {Object} data - 借出資料
+ * @return {Object} { valid: boolean, errors: Array<string> }
+ */
+function validateLoanBatchCreate_(data) {
+  const errors = [];
+
+  if (!Array.isArray(data.ItemIDs) || data.ItemIDs.length === 0) {
+    errors.push('ItemIDs is required and must be a non-empty array');
+  } else {
+    const normalized = data.ItemIDs
+      .map(id => String(id || '').trim())
+      .filter(id => id !== '');
+    if (normalized.length !== data.ItemIDs.length) {
+      errors.push('ItemIDs cannot contain empty values');
+    }
+    if (new Set(normalized).size !== normalized.length) {
+      errors.push('ItemIDs cannot contain duplicates');
+    }
+  }
+
+  if (!data.BorrowerName || data.BorrowerName.trim() === '') {
+    errors.push('BorrowerName is required');
+  }
+
+  if (!data.BorrowerContact || data.BorrowerContact.trim() === '') {
+    errors.push('BorrowerContact is required');
+  }
+
+  if (!data.LoanDate) {
+    errors.push('LoanDate is required');
+  } else if (!isValidIsoDate_(data.LoanDate)) {
+    errors.push('Invalid LoanDate format. Use YYYY-MM-DD');
+  }
+
+  if (!data.DueDate) {
+    errors.push('DueDate is required');
+  } else if (!isValidIsoDate_(data.DueDate)) {
+    errors.push('Invalid DueDate format. Use YYYY-MM-DD');
+  }
+
+  if (data.LoanDate && data.DueDate && isValidIsoDate_(data.LoanDate) && isValidIsoDate_(data.DueDate)) {
+    if (compareDates_(data.DueDate, data.LoanDate) < 0) {
+      errors.push('DueDate must be >= LoanDate');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors: errors
+  };
+}
+
+/**
  * 驗證歸還資料
  * @param {Object} data - 歸還資料
  * @return {Object} { valid: boolean, errors: Array<string> }
