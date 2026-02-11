@@ -1,0 +1,19 @@
+# 排除所有 Markdown 文件
+**/*.md
+
+# 排除 node_modules
+node_modules/**
+
+# 排除 scripts 資料夾
+scripts/**
+
+# 排除 src 資料夾（檔案已移到根目錄）
+src/**
+
+# 排除 Git 和設定檔案
+.git/**
+.gitignore
+.claspignore
+.clasp.json
+**/*.json
+!appsscript.json

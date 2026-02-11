@@ -1,0 +1,14 @@
+# clasp 相關
+.clasp.json
+
+# Node.js
+node_modules/
+npm-debug.log
+
+# 編輯器
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
