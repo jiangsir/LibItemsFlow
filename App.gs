@@ -33,6 +33,13 @@ function handleRequest_(method, e) {
     const query = (e && e.parameter) || {};
     const action = query.action || query.a; // 支援 action 或簡寫 a
     const pathInfo = e && e.pathInfo;
+
+    if (method === "GET" && !action && (!pathInfo || String(pathInfo).trim() === "" || String(pathInfo).trim() === "/")) {
+      return ok_({
+        service: "LibItemsFlow API",
+        message: "Use ?action=health|items|loans|returns",
+      });
+    }
     
     // 決定路由：查詢參數優先
     let route;

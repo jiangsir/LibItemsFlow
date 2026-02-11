@@ -17,3 +17,6 @@ src/**
 .clasp.json
 **/*.json
 !appsscript.json
+
+# exclude github pages files
+docs/**
