@@ -1,27 +1,26 @@
-# Copilot Instructions
+﻿# Copilot Instructions
 
-本專案請遵守以下規則：
+本專案所有產出請優先使用繁體中文（台灣）。
 
 ## Commit 訊息語言
 
-- 所有 commit message 一律使用台灣中文。
-- 不要使用英文句子當主體。
-- 技術名詞可保留英文（例如 API、GAS、GitHub Pages）。
+- 任何 commit message 一律使用繁體中文（台灣）。
+- 禁止使用英文句子作為主訊息（技術名詞可保留英文，例如 API、GAS、GitHub Pages）。
+- 若工具預設產生英文，請先轉寫為繁體中文再提交。
 
 ## Commit 訊息格式
 
-- 標題格式：`<type>: <中文摘要>`
-- `type` 建議使用：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`
-- 標題長度建議 50 字以內，清楚描述本次主要變更。
+- 採用 Conventional Commits：`<type>: <主旨>`
+- `type` 僅限：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`
+- 主旨建議 50 字內，清楚描述「做了什麼變更」。
 
 範例：
+- `feat: 新增批次借用流程與多設備清單送出`
+- `fix: 修正 ItemID 搜尋不到設備的問題`
+- `docs: 更新部署與 API 測試說明`
 
-- `feat: 新增借用頁面條碼掃描流程`
-- `fix: 修正重複歸還時 ReturnDate 型別錯誤`
-- `docs: 更新 CLASP 發版與測試 SOP`
+## Commit 主旨撰寫原則
 
-## Commit 內容風格
-
-- 優先描述「做了什麼」與「為什麼」。
-- 避免空泛字眼，例如「更新一下」「修一些東西」。
-- 若有破壞性變更，請在訊息中明確標示影響範圍。
+- 使用動詞開頭，直接描述變更內容。
+- 避免空泛字詞，例如「更新」、「調整」而不說明具體修改。
+- 若變更跨多個模組，主旨聚焦最重要的使用者價值或風險修正。

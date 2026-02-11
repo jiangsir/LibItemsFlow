@@ -208,8 +208,9 @@ function handleGetItems_(query) {
   if (query.search) {
     const searchTerm = query.search.toLowerCase();
     items = items.filter(item => 
-      item.Name.toLowerCase().includes(searchTerm) ||
-      item.AssetTag.toLowerCase().includes(searchTerm)
+      String(item.Name || '').toLowerCase().includes(searchTerm) ||
+      String(item.AssetTag || '').toLowerCase().includes(searchTerm) ||
+      String(item.ItemID || '').toLowerCase().includes(searchTerm)
     );
   }
   
