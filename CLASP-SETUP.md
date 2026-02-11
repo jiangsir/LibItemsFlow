@@ -1,5 +1,19 @@
 # clasp 部署指南
 
+## clasp 快速指令
+
+### 上傳
+clasp push
+### 查看現有版本
+clasp deployments
+### 建立新版本
+clasp version "fix: returnDate trim"
+### 佈署
+clasp deploy -i AKfycbwRVTUmlUsEqzVQTtd52-qBcYTYJJndBgUcyZQ0EU1Qlz9-8-8zrQdy-0dV_5UDKi_7 -V 14 -d "2026-02-11 fix"
+### 執行測試
+python scripts\run_mvp_tests.py --verbose
+
+
 ## 一、安裝 clasp
 
 ```powershell

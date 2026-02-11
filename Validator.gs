@@ -151,7 +151,10 @@ function validateLoanReturnable_(loan) {
     errors.push('Loan already returned');
   }
   
-  if (loan.ReturnDate && loan.ReturnDate.trim() !== '') {
+  const returnDateText = loan.ReturnDate === undefined || loan.ReturnDate === null
+    ? ''
+    : String(loan.ReturnDate).trim();
+  if (returnDateText !== '') {
     errors.push('Loan already has return date');
   }
   
